@@ -82,7 +82,6 @@ artifacts/
 *.ilk
 *.meta
 # *.obj
-*.pch
 *.pdb
 *.pgc
 *.pgd
@@ -265,3 +264,4 @@ AssetsConfig.yaml
 # ignore WinMerge backup files
 *.bak
 *.orig
+*.tga
