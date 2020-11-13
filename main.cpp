@@ -82,7 +82,9 @@ bool IsInTriangle(Vec2i point, Vec2i* t)
 
     int crossZ = (v1.x * v2.y) - (v1.y * v2.x);
 
-    if (crossZ < 1)
+    //point and t's has integers as coordinates, so abs(crossZ) < 1 means that crossZ is 0
+    //and thus triangle is degenerate
+    if (std::abs(crossZ) < 1)
         return false;
 
     float crossX = (v1.y * v2.z) - (v2.y * v1.z);
