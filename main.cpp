@@ -96,11 +96,17 @@ bool IsInTriangle(Vec2i point, Vec2i* t)
     Vec3i v1{ AB.x, AC.x, PA.x };
     Vec3i v2{ AB.y, AC.y, PA.y };
 
-    int crossX = (v1.y * v2.z) - (v2.y * v1.z);
-    int crossY = (v2.x * v1.z) - (v1.x * v2.z);
     int crossZ = (v1.x * v2.y) - (v1.y * v2.x);
 
-    return crossX >= 0 && crossY >= 0 && crossZ >= 0;
+    if (crossZ < 1)
+        return false;
+
+    int crossX = (v1.y * v2.z) - (v2.y * v1.z);
+    int crossY = (v2.x * v1.z) - (v1.x * v2.z);
+    
+    Vec3i barycentric{ 1 - (crossX + crossY) / crossZ, crossY / crossZ, crossX / crossZ };
+    //Vec3i barycentric{ 1 - (crossX + crossY), crossX, crossY };
+    return barycentric.x >= 0 && barycentric.y >= 0 && barycentric.z >= 0;
 }
 
 struct BoundingBox
@@ -131,35 +137,55 @@ void filled_triangle(Vec2i* t, TGAImage& image, TGAColor color)
 
     for (int i = 0; i < pixNum; i++)
     {
-        Vec2i pix{ (i % pixNum) + bb.lowerLeft.x, (i / pixNum) + bb.lowerLeft.y };
+        Vec2i pix{ (i % colNum) + bb.lowerLeft.x, (i / rowNum) + bb.lowerLeft.y };
         if (IsInTriangle(pix, t))
-        {
-            printf("set pixel\n");
             image.set(pix.x, pix.y, color);
+    }
+}
+
+template <typename T>
+Vec3<T> cross(Vec3<T> a, Vec3<T> b)
+{
+    return Vec3<T>(a.y * b.z - b.y * a.z, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+}
+
+Vec3f barycentric1(Vec2i* pts, Vec2i P) {
+    Vec3f u = cross(Vec3f(pts[2][0] - pts[0][0], pts[1][0] - pts[0][0], pts[0][0] - P[0]), Vec3f(pts[2][1] - pts[0][1], pts[1][1] - pts[0][1], pts[0][1] - P[1]));
+    /* `pts` and `P` has integer value as coordinates
+       so `abs(u[2])` < 1 means `u[2]` is 0, that means
+       triangle is degenerate, in this case return something with negative coordinates */
+    if (std::abs(u[2]) < 1) return Vec3f(-1, 1, 1);
+    return Vec3f(1.f - (u.x + u.y) / u.z, u.y / u.z, u.x / u.z);
+}
+
+void filled_triangle1(Vec2i* pts, TGAImage& image, TGAColor color) {
+    Vec2i bboxmin(image.get_width() - 1, image.get_height() - 1);
+    Vec2i bboxmax(0, 0);
+    Vec2i clamp(image.get_width() - 1, image.get_height() - 1);
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 2; j++) {
+            bboxmin[j] = std::max(0, std::min(bboxmin[j], pts[i][j]));
+            bboxmax[j] = std::min(clamp[j], std::max(bboxmax[j], pts[i][j]));
+        }
+    }
+    Vec2i P;
+    for (P.x = bboxmin.x; P.x <= bboxmax.x; P.x++) {
+        for (P.y = bboxmin.y; P.y <= bboxmax.y; P.y++) {
+            Vec3f bc_screen = barycentric1(pts, P);
+            if (bc_screen.x < 0 || bc_screen.y < 0 || bc_screen.z < 0) continue;
+            image.set(P.x, P.y, color);
         }
     }
 }
 
-int main(int argc, char** argv) {
-    
-    if (2==argc)
-        model = new Model(argv[1]);
-    else
-        model = new Model("obj/african_head.obj");
-    
-    TGAImage image(width, height, TGAImage::RGB);
-
-    Vec2i t0[3] = { Vec2i(10, 70),   Vec2i(50, 160),  Vec2i(70, 80) };
-    Vec2i t1[3] = { Vec2i(180, 50),  Vec2i(150, 1),   Vec2i(70, 180) };
-    Vec2i t2[3] = { Vec2i(180, 150), Vec2i(120, 160), Vec2i(130, 180) };
-
-    filled_triangle(t0, image, red);
-    filled_triangle(t1, image, white);
-    filled_triangle(t2, image, green);
-
-    image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
-    image.write_tga_file("output.tga");
-    delete model;
+int main(int argc, char** argv)
+{
+    TGAImage frame(200, 200, TGAImage::RGB);
+    Vec2i pts[3] = { Vec2i(10,10), Vec2i(100, 30), Vec2i(190, 160) };
+    filled_triangle(pts, frame, TGAColor(255, 0, 0, 255));
+    frame.flip_vertically(); // to place the origin in the bottom left corner of the image 
+    frame.write_tga_file("framebuffer.tga");
+    return 0;
 
     getchar();
 
