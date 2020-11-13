@@ -65,12 +65,6 @@ void triangle(Vec2i t0, Vec2i t1, Vec2i t2, TGAImage& image, TGAColor color)
     line(t2, t0, image, color);
 }
 
-template <typename T>
-Vec3<T> cross(Vec3<T> a, Vec3<T> b)
-{
-    return Vec3<T>(a.y * b.z - b.y * a.z, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
-}
-
 bool IsInTriangle(Vec2i point, Vec2i* t)
 {
     Vec2i AB = t[1] - t[0];
@@ -131,8 +125,29 @@ void filled_triangle(Vec2i* t, TGAImage& image, TGAColor color)
 int main(int argc, char** argv)
 {
     TGAImage frame(200, 200, TGAImage::RGB);
-    Vec2i pts[3] = { Vec2i(10,10), Vec2i(100, 30), Vec2i(190, 160) };
-    filled_triangle(pts, frame, TGAColor(255, 0, 0, 255));
+
+    //Vec2i pts[3] = { Vec2i(10,10), Vec2i(100, 30), Vec2i(190, 160) };
+    //filled_triangle(pts, frame, TGAColor(255, 0, 0, 255));
+    
+    model = new Model("obj/african_head.obj");
+
+    const Vec3f light_dir(0, 0, -1);
+    for (int i = 0; i < model->nfaces(); i++)
+    {
+        std::vector<int> face = model->face(i);
+        Vec2i screen_coords[3];
+        Vec3f world_coords[3];
+        for (int j = 0; j < 3; j++) {
+            world_coords[j] = model->vert(face[j]);
+            screen_coords[j] = Vec2i((world_coords[j].x + 1.) * width / 2., (world_coords[j].y + 1.) * height / 2.);
+        }
+        Vec3f n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
+        n.normalize();
+        float intensity = n * light_dir;
+        if (intensity > 0)
+            filled_triangle(screen_coords, frame, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255));
+    }
+
     frame.flip_vertically(); // to place the origin in the bottom left corner of the image 
     frame.write_tga_file("framebuffer.tga");
     //return 0;
