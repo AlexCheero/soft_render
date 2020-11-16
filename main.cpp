@@ -10,8 +10,10 @@ const TGAColor white = TGAColor(255, 255, 255, 255);
 const TGAColor red   = TGAColor(255, 0,   0,   255);
 const TGAColor green = TGAColor(0, 255, 0, 255);
 Model *model = NULL;
-const int width  = 200;
-const int height = 200;
+const int width  = 800;
+const int height = 800;
+const int pixCount = width * height;
+float zBuffer[pixCount];
 
 int getYForX(int x0, int y0, int x1, int y1, int x)
 {
@@ -65,41 +67,45 @@ void triangle(Vec2i t0, Vec2i t1, Vec2i t2, TGAImage& image, TGAColor color)
     line(t2, t0, image, color);
 }
 
-bool IsInTriangle(Vec2i point, Vec2i* t)
+Vec3f GetBarycentric(Vec3f point, Vec3f* t)
 {
-    Vec2i AB = t[1] - t[0];
-    Vec2i AC = t[2] - t[0];
-    Vec2i PA = t[0] - point;
+    Vec2f AB = Vec2f(t[1].x, t[1].y) - Vec2f(t[0].x, t[0].y);
+    Vec2f AC = Vec2f(t[2].x, t[2].y) - Vec2f(t[0].x, t[0].y);
+    Vec2f PA = Vec2f(t[0].x, t[0].y) - Vec2f(point.x, point.y);
 
-    Vec3i v1{ AB.x, AC.x, PA.x };
-    Vec3i v2{ AB.y, AC.y, PA.y };
+    Vec3f v1{ AB.x, AC.x, PA.x };
+    Vec3f v2{ AB.y, AC.y, PA.y };
 
     int crossZ = (v1.x * v2.y) - (v1.y * v2.x);
 
     //point and t's has integers as coordinates, so abs(crossZ) < 1 means that crossZ is 0
     //and thus triangle is degenerate
     if (std::abs(crossZ) < 1)
-        return false;
+        return Vec3f(-1);
 
     float crossX = (v1.y * v2.z) - (v2.y * v1.z);
     float crossY = (v2.x * v1.z) - (v1.x * v2.z);
-    
-    Vec3f barycentric{ 1 - (crossX + crossY) / crossZ, crossY / crossZ, crossX / crossZ };
+
+    return Vec3f{ 1 - (crossX + crossY) / crossZ, crossY / crossZ, crossX / crossZ };
+}
+
+bool IsInTriangle(Vec3f barycentric)
+{
     return barycentric.x >= 0 && barycentric.y >= 0 && barycentric.z >= 0;
 }
 
 struct BoundingBox
 {
-    Vec2i lowerLeft;
-    Vec2i upperRight;
+    Vec2f lowerLeft;
+    Vec2f upperRight;
 };
 
-void filled_triangle(Vec2i* t, TGAImage& image, TGAColor color)
+void filled_triangle(Vec3f* t, TGAImage& image, TGAColor color, float zBuffer[])
 {
-    BoundingBox bb{ t[0], t[0] };
+    BoundingBox bb{ Vec2f(std::numeric_limits<float>::max()), Vec2f(-std::numeric_limits<float>::max()) };
     for (int i = 0; i < 3; i++)
     {
-        Vec2i vert = t[i];
+        Vec3f vert = t[i];
         if (bb.lowerLeft.x > vert.x)
             bb.lowerLeft.x = vert.x;
         if (bb.lowerLeft.y > vert.y)
@@ -116,18 +122,37 @@ void filled_triangle(Vec2i* t, TGAImage& image, TGAColor color)
 
     for (int i = 0; i < pixNum; i++)
     {
-        Vec2i pix{ (i % colNum) + bb.lowerLeft.x, (i / colNum) + bb.lowerLeft.y };
-        if (IsInTriangle(pix, t))
-            image.set(pix.x, pix.y, color);
+        Vec3f pix{ (i % colNum) + bb.lowerLeft.x, (i / colNum) + bb.lowerLeft.y, 0/*sum of top's z times corresponding barycentric coord*/ };
+        Vec3f barycentric = GetBarycentric(pix, t);
+        for (int i = 0; i < 3; i++)
+            pix.z += barycentric[i] * t[i].z;
+        if (barycentric.x < 0 || barycentric.y < 0 || barycentric.z < 0)
+            continue;
+
+        if (!IsInTriangle(barycentric))
+            continue;
+
+        int zBufferIndex = pix.x + width * pix.y;
+        if (zBuffer[zBufferIndex] >= pix.z)
+            continue;
+
+        zBuffer[zBufferIndex] = pix.z;
+        image.set(pix.x, pix.y, color);
     }
+}
+
+Vec3f world2screen(Vec3f v)
+{
+    //return Vec3f((v.x + 1.) * width / 2., (v.y + 1.) * height / 2., v.z);
+    return Vec3f(int((v.x + 1.) * width / 2. + .5), int((v.y + 1.) * height / 2. + .5), v.z);
 }
 
 int main(int argc, char** argv)
 {
-    TGAImage frame(200, 200, TGAImage::RGB);
+    TGAImage frame(width, height, TGAImage::RGB);
 
-    //Vec2i pts[3] = { Vec2i(10,10), Vec2i(100, 30), Vec2i(190, 160) };
-    //filled_triangle(pts, frame, TGAColor(255, 0, 0, 255));
+    for (int i = 0; i < pixCount; i++)
+        zBuffer[i] = -std::numeric_limits<float>::max();
     
     model = new Model("obj/african_head.obj");
 
@@ -135,22 +160,24 @@ int main(int argc, char** argv)
     for (int i = 0; i < model->nfaces(); i++)
     {
         std::vector<int> face = model->face(i);
-        Vec2i screen_coords[3];
+        Vec3f screen_coords[3];
         Vec3f world_coords[3];
         for (int j = 0; j < 3; j++) {
             world_coords[j] = model->vert(face[j]);
-            screen_coords[j] = Vec2i((world_coords[j].x + 1.) * width / 2., (world_coords[j].y + 1.) * height / 2.);
+            screen_coords[j] = world2screen(world_coords[j]);//Vec3f((world_coords[j].x + 1.) * width / 2., (world_coords[j].y + 1.) * height / 2., world_coords[j].z);
         }
         Vec3f n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
         n.normalize();
         float intensity = n * light_dir;
         if (intensity > 0)
-            filled_triangle(screen_coords, frame, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255));
+            filled_triangle(screen_coords, frame, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255), zBuffer);
     }
 
     frame.flip_vertically(); // to place the origin in the bottom left corner of the image 
     frame.write_tga_file("framebuffer.tga");
     //return 0;
+
+    delete model;
 
     getchar();
 
