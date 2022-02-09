@@ -100,7 +100,7 @@ struct BoundingBox
     Vec2f upperRight;
 };
 
-void filled_triangle(Vec3f* t, TGAImage& image, TGAColor color, float zBuffer[])
+void filled_triangle(Vec3f* t, TGAImage& image, Vec2i* uvs, Model* model, float zBuffer[])
 {
     BoundingBox bb{ Vec2f(std::numeric_limits<float>::max()), Vec2f(-std::numeric_limits<float>::max()) };
     for (int i = 0; i < 3; i++)
@@ -124,8 +124,8 @@ void filled_triangle(Vec3f* t, TGAImage& image, TGAColor color, float zBuffer[])
     {
         Vec3f pix{ (i % colNum) + bb.lowerLeft.x, (i / colNum) + bb.lowerLeft.y, 0/*sum of top's z times corresponding barycentric coord*/ };
         Vec3f barycentric = GetBarycentric(pix, t);
-        for (int i = 0; i < 3; i++)
-            pix.z += barycentric[i] * t[i].z;
+        for (int j = 0; j < 3; j++)
+            pix.z += barycentric[j] * t[j].z;
         if (barycentric.x < 0 || barycentric.y < 0 || barycentric.z < 0)
             continue;
 
@@ -136,14 +136,18 @@ void filled_triangle(Vec3f* t, TGAImage& image, TGAColor color, float zBuffer[])
         if (zBuffer[zBufferIndex] >= pix.z)
             continue;
 
+        Vec2i uv;
+        uv += uvs[0] * barycentric[0];
+        uv += uvs[1] * barycentric[2];
+        uv += uvs[2] * barycentric[1];
+
         zBuffer[zBufferIndex] = pix.z;
-        image.set(pix.x, pix.y, color);
+        image.set(pix.x, pix.y, model->diffuse(uv));
     }
 }
 
 Vec3f world2screen(Vec3f v)
 {
-    //return Vec3f((v.x + 1.) * width / 2., (v.y + 1.) * height / 2., v.z);
     return Vec3f(int((v.x + 1.) * width / 2. + .5), int((v.y + 1.) * height / 2. + .5), v.z);
 }
 
@@ -164,18 +168,22 @@ int main(int argc, char** argv)
         Vec3f world_coords[3];
         for (int j = 0; j < 3; j++) {
             world_coords[j] = model->vert(face[j]);
-            screen_coords[j] = world2screen(world_coords[j]);//Vec3f((world_coords[j].x + 1.) * width / 2., (world_coords[j].y + 1.) * height / 2., world_coords[j].z);
+            screen_coords[j] = world2screen(world_coords[j]);
         }
         Vec3f n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
         n.normalize();
         float intensity = n * light_dir;
         if (intensity > 0)
-            filled_triangle(screen_coords, frame, TGAColor(intensity * 255, intensity * 255, intensity * 255, 255), zBuffer);
+        {
+            Vec2i uvs[3];
+            for (int j = 0; j < 3; j++)
+                uvs[j] = model->uv(i, j);
+            filled_triangle(screen_coords, frame, uvs, model, zBuffer);
+        }
     }
 
     frame.flip_vertically(); // to place the origin in the bottom left corner of the image 
     frame.write_tga_file("framebuffer.tga");
-    //return 0;
 
     delete model;
 
