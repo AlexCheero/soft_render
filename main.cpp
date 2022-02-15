@@ -89,11 +89,6 @@ Vec3f GetBarycentric(Vec3f point, Vec3f* t)
     return Vec3f{ 1 - (crossX + crossY) / crossZ, crossX / crossZ, crossY / crossZ };
 }
 
-bool IsInTriangle(Vec3f barycentric)
-{
-    return barycentric.x >= 0 && barycentric.y >= 0 && barycentric.z >= 0;
-}
-
 struct BoundingBox
 {
     Vec2f lowerLeft;
@@ -124,13 +119,11 @@ void filled_triangle(Vec3f* t, TGAImage& image, Vec2i* uvs, Model* model, float 
     {
         Vec3f pix{ (i % colNum) + bb.lowerLeft.x, (i / colNum) + bb.lowerLeft.y, 0/*sum of top's z times corresponding barycentric coord*/ };
         Vec3f barycentric = GetBarycentric(pix, t);
-        for (int j = 0; j < 3; j++)
-            pix.z += barycentric[j] * t[j].z;
         if (barycentric.x < 0 || barycentric.y < 0 || barycentric.z < 0)
             continue;
 
-        if (!IsInTriangle(barycentric))
-            continue;
+        for (int j = 0; j < 3; j++)
+            pix.z += barycentric[j] * t[j].z;
 
         int zBufferIndex = pix.x + width * pix.y;
         if (zBuffer[zBufferIndex] >= pix.z)
@@ -187,7 +180,7 @@ int main(int argc, char** argv)
 
     delete model;
 
-    getchar();
+    //getchar();
 
     return 0;
 }
