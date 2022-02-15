@@ -86,7 +86,7 @@ Vec3f GetBarycentric(Vec3f point, Vec3f* t)
     float crossX = (v1.y * v2.z) - (v2.y * v1.z);
     float crossY = (v2.x * v1.z) - (v1.x * v2.z);
 
-    return Vec3f{ 1 - (crossX + crossY) / crossZ, crossY / crossZ, crossX / crossZ };
+    return Vec3f{ 1 - (crossX + crossY) / crossZ, crossX / crossZ, crossY / crossZ };
 }
 
 bool IsInTriangle(Vec3f barycentric)
@@ -138,8 +138,8 @@ void filled_triangle(Vec3f* t, TGAImage& image, Vec2i* uvs, Model* model, float 
 
         Vec2i uv;
         uv += uvs[0] * barycentric[0];
-        uv += uvs[1] * barycentric[2];
-        uv += uvs[2] * barycentric[1];
+        uv += uvs[1] * barycentric[1];
+        uv += uvs[2] * barycentric[2];
 
         zBuffer[zBufferIndex] = pix.z;
         image.set(pix.x, pix.y, model->diffuse(uv));
