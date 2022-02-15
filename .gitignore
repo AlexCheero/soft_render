@@ -51,7 +51,7 @@ x86/
 build/
 bld/
 [Bb]in/
-[Oo]bj/
+#[Oo]bj/
 src/sb6/Debug/
 
 # Visual Studio 2015 cache/options directory
@@ -264,4 +264,6 @@ AssetsConfig.yaml
 # ignore WinMerge backup files
 *.bak
 *.orig
-*.tga
+#*.tga
+
+framebuffer.tga
